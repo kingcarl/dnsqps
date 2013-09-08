@@ -1,7 +1,7 @@
 dnsqps
 ======
 
-show dns qps
+show dns qps and rps
 # DNS QPS TOOL
 
 ## 关于
