@@ -26,11 +26,10 @@
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
 #include <netinet/udp.h>
+#include <netinet/tcp.h>
 #include <netdb.h>
 
 #include <pcap.h>
-//#include <pcap/pcap.h>
-//#include "pcap-int.h"
 
 #define PCAP_SNAPLEN 65535
 #define MAX_QNAME_SZ 512
@@ -51,13 +50,13 @@
 #define uh_sport source
 #endif
 
-static const char *Version = "20130830";
+static const char *Version = "201300918";
 
 char *device = NULL;
 pcap_t *pcap = NULL;
 char *progname = NULL;
 int promisc_flag = 1;
-char *bpf_program_str = "udp port 53";
+char *bpf_program_str = "port 53";
 static unsigned short check_port = 0;
 unsigned int query_count_intvl = 0;
 unsigned int reply_count_intvl = 0;
@@ -112,6 +111,58 @@ handle_dns(const char *buf, int len)
 }
 
 int
+handle_tcp(const struct tcphdr *tcp, int len)
+{
+    
+/*
+struct tcphdr {
+        __be16  source;
+        __be16  dest;
+        __be32  seq;
+        __be32  ack_seq;
+#if defined(__LITTLE_ENDIAN_BITFIELD)
+        __u16   res1:4,
+                doff:4,
+                fin:1,
+                syn:1,
+                rst:1,
+                psh:1,
+                ack:1,
+                urg:1,
+                ece:1,
+                cwr:1;
+#elif defined(__BIG_ENDIAN_BITFIELD)
+        __u16   doff:4,
+                res1:4,
+                cwr:1,
+                ece:1,
+                urg:1,
+                ack:1,
+                psh:1,
+                rst:1,
+                syn:1,
+                fin:1;
+#else
+#error  "Adjust your <asm/byteorder.h> defines"
+#endif  
+        __be16  window;
+        __sum16 check;
+        __be16  urg_ptr;
+}   
+*/
+    
+    if (check_port && check_port != tcp->dest && check_port != tcp->source)
+	return 0;
+    
+    if (tcp->fin == 1 || tcp->syn == 1 || tcp->rst == 1 || (tcp->ack == 1 && tcp->psh == 0))
+        return 0;
+    
+    if (0 == handle_dns((char *)(tcp + 1), len - sizeof(*tcp)))
+	return 0;
+    return 1;
+}
+
+int
 handle_udp(const struct udphdr *udp, int len)
 {
     if (check_port && check_port != udp->uh_dport && check_port != udp->uh_sport)
@@ -125,14 +176,24 @@ int
 handle_ipv4(const struct ip *ip, int len)
 {
     int offset = ip->ip_hl << 2;
-    if (IPPROTO_UDP != ip->ip_p)
-	return 0;
-	
-    if (0 == handle_udp((struct udphdr *)((char *)ip + offset), len - offset))
-	return 0;
-    return 1;
+    if (IPPROTO_UDP == ip->ip_p)
+    {
+	if (0 == handle_udp((struct udphdr *)((char *)ip + offset), len - offset))
+	    return 0;
+	return 1;
+    }
+    else if (IPPROTO_TCP == ip->ip_p)
+    {
+	if (0 == handle_tcp((struct tcphdr *)((char *)ip + offset), len - offset))
+	    return 0;
+	return 1;
+    }
+    else
+    {
+	return 1;
+    }
+    
 }
-
 
 int
 handle_ip(const u_char * pkt, int len, unsigned short etype)
@@ -168,18 +229,6 @@ handle_pcap(u_char * udata, const struct pcap_pkthdr *hdr, const u_char * pkt)
     if (0 == handle_datalink(pkt, hdr->caplen))
 	return;
 }
-
-/*int
-pcap_select(pcap_t * p, int sec, int usec)
-{
-    fd_set R;
-    struct timeval to;
-    FD_ZERO(&R);
-    FD_SET(pcap_fileno(p), &R);
-    to.tv_sec = sec;
-    to.tv_usec = usec;
-    return select(pcap_fileno(p) + 1, &R, NULL, NULL, &to);
-}*/
 
 void prompt_info(int signo)
 {
@@ -288,7 +337,6 @@ main(int argc, char *argv[])
 	fprintf(stderr, "pcap_setfilter failed\n");
 	exit(1);
     }
-//    pcap_setnonblock(pcap, 1, errbuf);
 
     switch (pcap_datalink(pcap)) {
     case DLT_EN10MB:
@@ -300,9 +348,7 @@ main(int argc, char *argv[])
 	return 1;
 	break;
     }
-	
-//    pcap_select(pcap, 1, 0);
-//    pcap_dispatch(pcap, -1, handle_pcap, NULL);
+
     init_time();
     init_sigaction();
     pcap_loop(pcap, 0, handle_pcap, NULL);
