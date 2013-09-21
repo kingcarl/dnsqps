@@ -221,7 +221,7 @@ struct tcphdr {
     if (0 == tcp->psh )
         return 0;
     
-    if (0 == handle_dns((char *)(tcp + 1), len - sizeof(*tcp)))
+    if (0 == handle_dns((char *)(tcp + (tcp->doff*4 - 20) + 3), len - sizeof(*tcp) - (tcp->doff*4 - 20), dst_addr))
 	return 0;
     return 1;
 }
