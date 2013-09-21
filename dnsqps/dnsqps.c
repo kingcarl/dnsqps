@@ -166,8 +166,10 @@ handle_dns(const char *buf, int len, const inX_addr *dst_addr)
 
     if (0 == qh.qr && 0 == attach_list_match(dst_addr)) {
 	query_count_intvl++;
-    } else{
+    } else if (1 == qh.qr){
 	reply_count_intvl++;
+    }else{
+	return 1;
     }
     return 1;
 }
@@ -216,7 +218,7 @@ struct tcphdr {
     if (check_port && check_port != tcp->dest && check_port != tcp->source)
 	return 0;
     
-    if (tcp->psh == 0)
+    if (0 == tcp->psh )
         return 0;
     
     if (0 == handle_dns((char *)(tcp + 1), len - sizeof(*tcp)))
