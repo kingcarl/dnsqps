@@ -385,7 +385,7 @@ main(int argc, char *argv[])
     argc -= optind;
     argv += optind;
 
-    if (argc < 1 && 0 == dst_flag)
+    if (argc < 2 && 0 == dst_flag)
 	usage();
     device = strdup(argv[0]);
 	
