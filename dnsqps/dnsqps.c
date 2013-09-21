@@ -332,7 +332,7 @@ void init_time(void)
 {
     struct itimerval value;
     value.it_value.tv_sec = 1;
-    value.it_value.tv_usec = 100000;
+    value.it_value.tv_usec = 1000;
     value.it_interval = value.it_value;
     setitimer(ITIMER_REAL, &value, NULL);
 }
