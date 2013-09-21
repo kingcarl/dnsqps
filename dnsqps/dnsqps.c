@@ -166,10 +166,8 @@ handle_dns(const char *buf, int len, const inX_addr *dst_addr)
 
     if (0 == qh.qr && 0 == attach_list_match(dst_addr)) {
 	query_count_intvl++;
-    } else if (1 == qh.qr) {
+    } else{
 	reply_count_intvl++;
-    } else {
-	return 1;
     }
     return 1;
 }
