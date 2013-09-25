@@ -93,7 +93,7 @@ typedef struct ip_list_d {
     struct ip_list_d *next;
 } ip_list_t;
 
-ip_list_t *Attachlist;
+ip_list_t *Attachlist = NULL;
 
 void
 ssplit(char *line, char *p[], char *delim)
@@ -333,6 +333,8 @@ handle_pcap(u_char * udata, const struct pcap_pkthdr *hdr, const u_char * pkt)
 void
 prompt_info(int signo)
 {
+    ip_list_t *tmp = NULL;
+    
     if(1 == opt_count_queries && 0 == opt_count_replies)
     {
 	printf("%d qps\n", query_count_intvl);
@@ -347,7 +349,11 @@ prompt_info(int signo)
 	printf("%d rps\n", reply_count_intvl);
     }
     
-    free(Attachlist);
+    for (tmp = Attachlist; tmp != NULL; tmp = Attachlist->next){
+	Attachlist = Attachlist->next;
+	free(tmp);
+    }
+	
     pcap_close(pcap);
     exit(0);	
 }
