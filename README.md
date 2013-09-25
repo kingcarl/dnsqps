@@ -26,4 +26,4 @@ dnsqps是一个统计DNS服务器每秒收到解析请求和回复的监控工�
     
 运行：
     
-    ./dnsqps [-Q|-R] [device]
+    ./dnsqps [-Q|-R] [device] [-d "ip1 {ip2 ... }"] 
