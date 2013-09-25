@@ -1,5 +1,5 @@
-/*
- * $Id: dnsqps.c,v 0.0725 2013/08/30 17:10:25 Carl Guan Exp $
+ /*
+ *$Id: dnsqps.c,v 0.0725 2013/08/30 17:10:25 Carl Guan Exp $
  * 
  * http://www.baidu.com/
  * 
@@ -31,12 +31,15 @@
 
 #include <pcap.h>
 
-// thanks dnstop's authors
+// thanks to dnstop's authors
 #include "inX_addr.h" 
 
 #define PCAP_SNAPLEN 65535
 #define MAX_QNAME_SZ 512
 #define DNS_MSG_HDR_SZ 12
+#define MAX_BUF 128
+#define MAX_NUM 8
+
 #ifndef ETHER_HDR_LEN
 #define ETHER_ADDR_LEN 6
 #define ETHER_TYPE_LEN 2
@@ -92,6 +95,26 @@ typedef struct ip_list_d {
 
 ip_list_t *Attachlist;
 
+void
+ssplit(char *line, char *p[], char *delim)
+{
+    char *buf = line;
+    char *outer_ptr = NULL;
+    char *inner_ptr = NULL;
+    int in = 0;
+
+    while ((p[in]=strtok_r(buf, delim, &outer_ptr))!= NULL)
+    {
+        buf = p[in];
+        while ((p[in] = strtok_r(buf, delim, &inner_ptr)) != NULL)
+        {
+            in++;
+            buf=NULL;
+        }
+        buf=NULL;
+    }
+}
+
 int
 attach_list_match(const inX_addr *addr)
 {
@@ -128,19 +151,28 @@ attach_dst_addr(const char *name)
     struct addrinfo *ai_list;
     struct addrinfo *ai_ptr;
     struct inX_addr *addr;
+    char ip[MAX_BUF];
+    char *seg[MAX_NUM];
+    char **ips;
     int status;
-    status = getaddrinfo(name, NULL, NULL, &ai_list);
-    if (status != 0 )
-	return ;
     
-    for (ai_ptr = ai_list; ai_ptr != NULL; ai_ptr = ai_ptr->ai_next){
-	if (ai_ptr->ai_family == AF_INET){
-	    inXaddr_assign_v4(&addr, &((struct sockaddr_in *)ai_ptr->ai_addr)->sin_addr);
-	    attach_list_add(&addr);
+    strcpy(ip, name);
+    ssplit(ip, seg, " ");
+    
+    for(ips = seg; *ips != NULL; ips++){
+	status = getaddrinfo(*ips, NULL, NULL, &ai_list);
+	if (status != 0 )
+	    return ;
+    
+	for (ai_ptr = ai_list; ai_ptr != NULL; ai_ptr = ai_ptr->ai_next){
+	    if (ai_ptr->ai_family == AF_INET){
+	        inXaddr_assign_v4(&addr, &((struct sockaddr_in *)ai_ptr->ai_addr)->sin_addr);
+	        attach_list_add(&addr);
+	    }
 	}
-    }
     
-    freeaddrinfo(ai_list);
+	freeaddrinfo(ai_list);
+    }
 }
 
 int
@@ -218,10 +250,10 @@ struct tcphdr {
     if (check_port && check_port != tcp->dest && check_port != tcp->source)
 	return 0;
     
-    if (0 == tcp->psh )
+    if (0 == tcp->psh)
         return 0;
     
-    if (0 == handle_dns((char *)(tcp + (tcp->doff*4 - 20) + 3), len - sizeof(*tcp) - (tcp->doff*4 - 20), dst_addr))
+    if (0 ==  handle_dns((char *)(tcp + (tcp->doff*4 - 20) + 3), len - sizeof(*tcp) - (tcp->doff*4 - 20), dst_addr))
 	return 0;
     return 1;
 }
@@ -341,10 +373,10 @@ void init_time(void)
 void
 usage(void)
 {
-    fprintf(stderr, "usage: %s [opts] [-d x.x.x.x]  netdevice\n", progname);
+    fprintf(stderr, "usage: %s [opts] [-d 'ip1 {ip2 ... }']  netdevice\n", progname);
     fprintf(stderr, "\t-Q\tCount queries\n");
     fprintf(stderr, "\t-R\tCount responses\n");
-    fprintf(stderr, "\t-d\tCapture Destination IP Address \n");
+    fprintf(stderr, "\t-d\tCapture Destination IP Address (multi ip must use ' ' to split)\n");
     fprintf(stderr, "\t-v\tshow version information\n");
     fprintf(stderr, "\t-h\tshow help information\n");
     exit(1);
