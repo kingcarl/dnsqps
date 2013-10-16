@@ -71,6 +71,7 @@ int opt_count_replies = 0;
 int dst_flag = 0;
 
 int (*handle_datalink) (const u_char * pkt, int len)= NULL;
+void (*qr_count) (unsigned int qr_flag, const inX_addr *dst_addr) = NULL;
 
 typedef struct _rfc1035_header {
     unsigned short id;
@@ -175,6 +176,24 @@ attach_dst_addr(const char *name)
     }
 }
 
+void std_qr_count(unsigned int qr_flag, const inX_addr *dst_addr){
+    if (0 == qr_flag){
+        query_count_intvl++;
+    } else {
+        reply_count_intvl++;
+    }
+
+}
+
+void dst_qr_count(unsigned int qr_flag, const inX_addr *dst_addr){
+    if (0 == qr_flag && 0 == attach_list_match(dst_addr)) {
+        query_count_intvl++;
+    }else{
+        reply_count_intvl++;
+    }
+
+}
+
 int
 handle_dns(const char *buf, int len, const inX_addr *dst_addr)
 {
@@ -196,13 +215,8 @@ handle_dns(const char *buf, int len, const inX_addr *dst_addr)
     if (1 == qh.qr && 0 == opt_count_replies)
 	return 0;
 
-    if (0 == qh.qr && 0 == attach_list_match(dst_addr)) {
-	query_count_intvl++;
-    } else if (1 == qh.qr){
-	reply_count_intvl++;
-    }else{
-	return 1;
-    }
+    qr_count(qh.qr, dst_addr);
+
     return 1;
 }
 
@@ -349,7 +363,7 @@ prompt_info(int signo)
 	printf("%d rps\n", reply_count_intvl);
     }
     
-    for (tmp = Attachlist; tmp != NULL; tmp = Attachlist->next){
+    for (tmp = Attachlist; tmp != NULL; tmp = Attachlist){
 	Attachlist = Attachlist->next;
 	free(tmp);
     }
@@ -423,7 +437,7 @@ main(int argc, char *argv[])
     argc -= optind;
     argv += optind;
 
-    if (argc < 2 && 0 == dst_flag)
+    if (argc < 1)
 	usage();
     device = strdup(argv[0]);
 	
@@ -432,6 +446,12 @@ main(int argc, char *argv[])
     if (0 == opt_count_queries && 0 == opt_count_replies)
 	opt_count_queries = 1;
 
+    if (1 == dst_flag){
+	qr_count = dst_qr_count;
+    }else{
+	qr_count = std_qr_count;
+    }
+    
     pcap = pcap_open_live(device, PCAP_SNAPLEN, promisc_flag, 1000, errbuf);
 
     if (NULL == pcap) {
@@ -468,3 +488,5 @@ main(int argc, char *argv[])
 
     return 0;
 }
+
+
