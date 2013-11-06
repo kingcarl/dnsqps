@@ -39,6 +39,7 @@
 #define DNS_MSG_HDR_SZ 12
 #define MAX_BUF 128
 #define MAX_NUM 8
+#define IPPROTO_UDP_TTM 193
 
 #ifndef ETHER_HDR_LEN
 #define ETHER_ADDR_LEN 6
@@ -69,9 +70,11 @@ unsigned int reply_count_intvl = 0;
 int opt_count_queries = 0;
 int opt_count_replies = 0;
 int dst_flag = 0;
+int ttm_flag = 0;
 
 int (*handle_datalink) (const u_char * pkt, int len)= NULL;
 void (*qr_count) (unsigned int qr_flag, const inX_addr *dst_addr) = NULL;
+int (*handle_ip_misc) (const struct ip *ip, int len) = NULL;
 
 typedef struct _rfc1035_header {
     unsigned short id;
@@ -290,7 +293,34 @@ handle_ipv4(const struct ip *ip, int len)
     
     inXaddr_assign_v4(&dst_addr, &ip->ip_dst);
     
-    if (IPPROTO_UDP == ip->ip_p)
+    if (IPPROTO_UDP == ip->ip_p || IPPROTO_UDP_TTM == ip->ip_p)
+    {
+	if (0 == handle_udp((struct udphdr *)((char *)ip + offset), len - offset, &dst_addr))
+	    return 0;
+	return 1;
+    }
+    else if (IPPROTO_TCP == ip->ip_p)
+    {
+	if (0 == handle_tcp((struct tcphdr *)((char *)ip + offset), len - offset, &dst_addr))
+	    return 0;
+	return 1;
+    }
+    else
+    {
+	return 1;
+    }
+    
+}
+
+int
+handle_ipv4_ttm(const struct ip *ip, int len)
+{
+    int offset = (ip->ip_hl << 2) + 8;
+    inX_addr dst_addr;
+    
+    inXaddr_assign_v4(&dst_addr, &ip->ip_dst);
+    
+    if (IPPROTO_UDP == ip->ip_p || IPPROTO_UDP_TTM == ip->ip_p)
     {
 	if (0 == handle_udp((struct udphdr *)((char *)ip + offset), len - offset, &dst_addr))
 	    return 0;
@@ -313,7 +343,7 @@ int
 handle_ip(const u_char * pkt, int len, unsigned short etype)
 {
     if (ETHERTYPE_IP == etype) {
-	return handle_ipv4((struct ip *)pkt, len);
+	return handle_ip_misc((struct ip *)pkt, len);
     }
     return 0;
 }
@@ -397,6 +427,7 @@ usage(void)
     fprintf(stderr, "\t-Q\tCount queries\n");
     fprintf(stderr, "\t-R\tCount responses\n");
     fprintf(stderr, "\t-d\tCapture Destination IP Address (multi ip must use ' ' to split)\n");
+    fprintf(stderr, "\t-t\tenable ttm module suport\n");
     fprintf(stderr, "\t-v\tshow version information\n");
     fprintf(stderr, "\t-h\tshow help information\n");
     exit(1);
@@ -411,7 +442,7 @@ main(int argc, char *argv[])
 
     progname = strdup(strrchr(argv[0], '/') ? strchr(argv[0], '/') + 1 : argv[0]);
 
-    while ((x = getopt(argc, argv, "hd:QRv")) != -1) {
+    while ((x = getopt(argc, argv, "hd:QRtv")) != -1) {
 	switch (x) {
 	case 'Q':
 	    opt_count_queries = 1;
@@ -429,6 +460,9 @@ main(int argc, char *argv[])
 	    exit(0);
 	case 'h':
 	    usage();
+	case 't':
+	    ttm_flag = 1;
+	    break;
 	default:
 	    usage();
 	    break;
@@ -450,6 +484,12 @@ main(int argc, char *argv[])
 	qr_count = dst_qr_count;
     }else{
 	qr_count = std_qr_count;
+    }
+    
+    if (1 == ttm_flag){
+	handle_ip_misc = handle_ipv4_ttm;
+    }else{
+	handle_ip_misc = handle_ipv4;
     }
     
     pcap = pcap_open_live(device, PCAP_SNAPLEN, promisc_flag, 1000, errbuf);
@@ -488,5 +528,3 @@ main(int argc, char *argv[])
 
     return 0;
 }
-
-
